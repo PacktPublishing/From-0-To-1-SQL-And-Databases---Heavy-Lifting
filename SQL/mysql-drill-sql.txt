@@ -1,0 +1,253 @@
+show databases;
+#Use Command+Enter (Mac) or Ctrl+Enter (Windows) to run queries
+
+# Let's create a database now and put some data in tables 
+
+CREATE database nse;#Command+Enter (or) use the button on top to execute the
+# query
+
+show databases;
+
+use nse;
+
+show tables; # no tables right now! Let's create some
+
+# We'll create a table to hold stock movement data. We've downloaded some
+# files from the National Stock Exchange of India 
+
+create table stockMovements(
+symbol varchar(256),
+series varchar(256),
+open float,
+high float,
+low float, 
+close float,
+last float,
+prevclose float,
+tottrdqty float,
+tottrdval float,
+timestamp varchar(256),
+totaltrades float,
+isin varchar(256)
+); 
+# Let's take a look at the file to figure out the columns 
+
+desc stockMovements; # desc will show us the schema of the table
+
+select symbol,series from stockMovements; # There is no data in this table
+
+# You can use an insert statement to insert data (rows) into the table. 
+# We will load the data from a csv file, the one we downloaded from NSE. 
+
+Load data infile '/Users/swethakolalapudi/PythonCodeExamples/cm01JAN2014bhav.csv'
+into table stockMovements fields terminated by ',' ignore 1 lines; 
+
+# fields terminated by  - used to specify the delimiter, the default is '\t'
+# ignore 1 lines - you can tell mysql how many rows it should skip if your
+#                   file has a header. This file has 1 row as a header. 
+
+# Let's see what the table contains now. 
+
+select * from stockMovements limit 10;
+# We can explore this data a little 
+
+# How many records are there? 
+
+select count(*) from stockMovements;
+
+# How many distinct stock tickers? 
+
+select count(distinct symbol) as numTickers from stockMovements;
+
+# What was the max, min and average opening price? 
+
+select max(open) as maxOpen, min(open) as minOpen, avg(open) as 
+avgOpen from stockMovements;
+
+# Which stock had the max opening price? 
+
+select symbol, series from stockMovements where open=19399;
+
+# Let's create another table. In this table, we'll hold the symbol, 
+# series and whether its an equity or not. We'll also make, the (symbol,series) 
+# tuple a unique key. This way, whenever we load files corresponding to 
+# different days into this table, only the new stock tickers will be added
+# to this table. 
+
+
+create table tickers(
+id int(11) unsigned not null auto_increment,# This will create a unique integer id for each (symbol,series) tuple
+symbol varchar(256),
+series varchar(256),
+isEquity int,
+primary key(id),
+unique key (symbol,series)
+);
+
+desc tickers;
+
+# You can see the schema we've created on the left 
+# let's load the data into this table now 
+
+Load data infile '/Users/swethakolalapudi/PythonCodeExamples/cm01JAN2014bhav.csv'
+ignore INTO TABLE tickers
+# ignore will skip any duplicate rows (so if symbol repeats, it will be skipped) 
+fields terminated by ',' IGNORE 1 lines
+# the delimiter and the header row 
+(symbol,@series,@open,@high,@low,@close,@last,
+@prevclose,@tottrdqty,@tottrdval,@timestamp,@totaltrades,@isin)
+# What to do with the list of columns in the csv file
+# the first one is sent to the column 'symbol'
+# The rest are assigned to variables, you can use these variables to 
+# explicitly set column values (as we do below) or not do anything with 
+# them at all, in which case those columns of the csv will be ignored. 
+SET series=@series,isEquity=if(@series='EQ',1,0)
+;# here we are explicitly setting the column values in the table 
+# the column 'series' should be set to the value of the variable 
+# @series, which is the second column of the csv. 
+# The column isEquity , should be set to the value 1 if @series ='EQ' else 0
+# there's a lot going on here! Let's parse one by one. 
+
+# We loaded the first csv file 
+# Let's see the result 
+
+select * from tickers limit 10;
+
+# See the id column that came with an integer value? 
+# We did not set this explicitly in our load statement.
+# Since we set it to auto-increment, it automatically takes the next
+# value. 
+
+# Let's now load a second csv file into both our tables.  
+
+
+Load data infile '/Users/swethakolalapudi/PythonCodeExamples/cm02JAN2014bhav.csv'
+into table stockMovements fields terminated by ',' ignore 1 lines; 
+
+# Let's see how many rows there are for each date (each date corresponds
+# to 1 csv file) 
+
+select timestamp, count(symbol) as numRows from
+stockMovements group by timestamp;
+
+# so the second file added 1468 rows to the table
+
+# Now let's see what happens when we load the second file into the 
+# tickers table. 
+
+Load data infile '/Users/swethakolalapudi/PythonCodeExamples/cm02JAN2014bhav.csv'
+ignore INTO TABLE tickers
+# ignore will skip any duplicate rows (so if symbol repeats, it will be skipped) 
+fields terminated by ',' IGNORE 1 lines
+# the delimiter and the header row 
+(symbol,@series,@open,@high,@low,@close,@last,
+@prevclose,@tottrdqty,@tottrdval,@timestamp,@totaltrades,@isin)
+# What to do with the list of columns in the csv file
+# the first one is sent to the column 'symbol'
+# The rest are assigned to variables, you can use these variables to 
+# explicitly set column values (as we do below) or not do anything with 
+# them at all, in which case those columns of the csv will be ignored. 
+SET series=@series,isEquity=if(@series='EQ',1,0);
+
+# Only 78 rows were added! This is because we set the (symbol,series) tuple
+# to be a unique key and we ignored any duplicates.
+
+
+# Let's now create a new table, 
+# It should have each ticker's unique integer id, its total traded 
+# quantity across both the days, it's total traded value across both the 
+# days
+
+# First let's construct a query that will give us this result
+
+select t.id as tickerId, sum(sm.tottrdqty) as tottrdqty, 
+sum(sm.tottrdval) as tottrdval
+from tickers t inner join
+stockMovements sm on 
+t.symbol=sm.symbol
+and t.isEquity=1
+group by t.id ; 
+
+# Let's check if this works! Coolio, let's now create a table to hold
+# the result of this query. 
+
+create table tickerSummary as (
+select t.id as tickerId, sum(sm.tottrdqty) as tottrdqty, 
+sum(sm.tottrdval) as tottrdval
+from tickers t inner join
+stockMovements sm on 
+t.symbol=sm.symbol
+and t.isEquity=1
+group by t.id 
+);
+
+desc tickerSummary;
+select * from tickerSummary limit 10;
+
+# Let's insert a dummy ticker into our tickers table. 
+
+insert into tickers (symbol,series,isEquity) values ('DUMMY','EQ',1);
+
+select * from tickers where symbol='DUMMY';
+
+# Let's go back to our tickerSummary table. 
+# We'll make a small change. First let's delete all the data in that 
+# table. 
+
+truncate tickerSummary;
+
+select * from tickerSummary; 
+# no rows to return , all the data has been deleted in one go!
+
+
+# Let's also drop the table, as we'll need to create it again 
+drop table tickerSummary;
+show tables;
+
+# Let's now create the tickerSummary again. 
+create table tickerSummary as (
+select t.id as tickerId, sum(sm.tottrdqty) as tottrdqty, 
+sum(sm.tottrdval) as tottrdval
+from tickers t left outer join
+stockMovements sm on 
+t.symbol=sm.symbol
+and t.isEquity=1
+group by t.id 
+);
+
+# The stockMovements table does not have any corresponding values
+# for the ticker 'DUMMY', let's see what happens. 
+
+select * from tickerSummary where tickerId in 
+(select id from tickers where symbol='DUMMY');
+
+# What if we had done an inner join like earlier? Let's delete the 
+# table again. 
+drop table tickerSummary;
+
+create table tickerSummary as (
+select t.id as tickerId, sum(sm.tottrdqty) as tottrdqty, 
+sum(sm.tottrdval) as tottrdval
+from tickers t inner join
+stockMovements sm on 
+t.symbol=sm.symbol
+and t.isEquity=1
+group by t.id 
+);
+
+select * from tickerSummary where tickerId in 
+(select id from tickers where symbol='DUMMY');
+
+# There was no row where the condition t.symbol=sm.symbol was satisfied 
+# and the ticker name was 'DUMMY'. So that id does not exist in the 
+# summary table at all! 
+
+
+## Well,,that's all folks! Have a nice day :)
+
+
+
+
+
+
+
