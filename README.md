@@ -35,7 +35,3 @@ N/A
 * [Introduction to MySQL With Node.js - Learn to Use MySQL with Node [Video]](https://www.packtpub.com/application-development/introduction-mysql-nodejs-learn-use-mysql-node-video)
 
 * [Learn SQL with Microsoft SQL Server [Video]](https://www2.packtpub.com/application-development/learn-sql-microsoft-sql-server-video)
-### Download a free PDF
-
- <i>If you have already purchased a print or Kindle version of this book, you can get a DRM-free PDF version at no cost.<br>Simply click on the link to claim your free PDF.</i>
-<p align="center"> <a href="https://packt.link/free-ebook/9781789134285">https://packt.link/free-ebook/9781789134285 </a> </p>
